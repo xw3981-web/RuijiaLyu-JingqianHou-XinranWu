@@ -1,11 +1,7 @@
 import socket
 import time
 
-# use local loop back address by default
-#CHAT_IP = '127.0.0.1'
-# CHAT_IP = socket.gethostbyname(socket.gethostname())
-CHAT_IP = ''#socket.gethostbyname(socket.gethostname())
-
+CHAT_IP = '127.0.0.1'
 CHAT_PORT = 1112
 SERVER = (CHAT_IP, CHAT_PORT)
 
@@ -23,8 +19,17 @@ S_LOGGEDIN  = 2
 S_CHATTING  = 3
 
 SIZE_SPEC = 5
-
 CHAT_WAIT = 0.2
+
+# ================= Game Message Type Constants =================
+GAME_SNAKE_SCORE = "game_snake_score"
+GAME_RANK = "game_rank"
+GAME_TICTACTOE_MOVE = "game_tictactoe_move"
+GAME_TICTACTOE_INVITE = "game_tictactoe_invite"
+GAME_TICTACTOE_ACCEPT = "game_tictactoe_accept"
+GAME_TICTACTOE_DECLINE = "game_tictactoe_decline"
+GAME_TICTACTOE_STATE = "game_tictactoe_state"
+GAME_TICTACTOE_END = "game_tictactoe_end"
 
 def print_state(state):
     print('**** State *****::::: ')
@@ -40,7 +45,6 @@ def print_state(state):
         print('Error: wrong state')
 
 def mysend(s, msg):
-    #append size to message and send it
     msg = ('0' * SIZE_SPEC + str(len(msg)))[-SIZE_SPEC:] + str(msg)
     msg = msg.encode()
     total_sent = 0
@@ -52,7 +56,6 @@ def mysend(s, msg):
         total_sent += sent
 
 def myrecv(s):
-    #receive size first
     size = ''
     while len(size) < SIZE_SPEC:
         text = s.recv(SIZE_SPEC - len(size)).decode()
@@ -61,7 +64,6 @@ def myrecv(s):
             return('')
         size += text
     size = int(size)
-    #now receive message
     msg = ''
     while len(msg) < size:
         text = s.recv(size-len(msg)).decode()
@@ -69,9 +71,8 @@ def myrecv(s):
             print('disconnected')
             break
         msg += text
-    #print ('received '+message)
     return (msg)
 
 def text_proc(text, user):
     ctime = time.strftime('%d.%m.%y,%H:%M', time.localtime())
-    return('(' + ctime + ') ' + user + ' : ' + text) # message goes directly to screen
+    return('(' + ctime + ') ' + user + ' : ' + text)

@@ -7,6 +7,8 @@ import json
 from sentiment_tools import analyze_sentiment
 from image_gen import generate_image
 from nlp_tools import extract_keywords, simple_summary
+from game_snake import SnakeGame
+from game_tictactoe import TicTacToeGame
 
 
 class GUI:
@@ -106,6 +108,16 @@ class GUI:
 
         Button(frame, text="Help",
                command=self.help_button).grid(row=0, column=4, padx=5)
+        
+        # ================= GAME BUTTONS =================
+        frame2 = Frame(self.Window, bg="#17202A")
+        frame2.pack(pady=5)
+
+        Button(frame2, text="🐍 Play Snake",
+               command=self.start_snake).grid(row=0, column=0, padx=5)
+
+        Button(frame2, text="❌⭕ Invite TicTacToe",
+               command=self.invite_ttt).grid(row=0, column=1, padx=5)
 
     # ================= DISPLAY =================
     def display_message(self, msg):
@@ -207,8 +219,24 @@ Better summary if you chat on ONE topic
             except:
                 self.display_message("[Image Failed ❌]")
             return
+        
+        if msg == "/ttt_accept":
+            if hasattr(self, "pending_ttt_peer"):
+                payload = json.dumps({"action": "game_ttt_accept", "target": self.pending_ttt_peer})
+                self.send(payload)
+                self.start_ttt_game(False) 
+                self.display_message("[System] TicTacToe started!")
+            return
+        
+        if msg.lower() in ["y", "yes", "ok"]:
+            if hasattr(self, "pending_ttt_peer"):
+                payload = json.dumps({"action": "game_ttt_accept", "target": self.pending_ttt_peer})
+                self.send(payload)
+                self.start_ttt_game(False)
+                self.display_message("[System] Game Start! ")
+                delattr(self, "pending_ttt_peer") 
+                return
 
-        # sentiment
         label, emoji = analyze_sentiment(msg)
         self.display_message(f"[{label} {emoji}] You: {msg}")
 
@@ -219,17 +247,43 @@ Better summary if you chat on ONE topic
     def proc(self):
         while True:
             read, _, _ = select.select([self.socket], [], [], 0)
-
-            peer_msg = []
+            peer_msg = ""
+            
             if self.socket in read:
                 peer_msg = self.recv()
+
+            if peer_msg:
+                try:
+                    parsed = json.loads(peer_msg)
+                    action = parsed.get("action")
+                    if action == "game_snake_rank":
+                    
+                        self.Window.after(0, lambda p=parsed: self.display_message(f"🏆 [Leaderboard]\n{p['rank']}"))
+                        peer_msg = "" 
+                   
+                    elif action == "game_ttt_invite":
+                        self.pending_ttt_peer = parsed["from"]
+                        self.Window.after(0, lambda p=parsed: self.display_message(f"🎮 {p['from']} Invite you to play tictactoe! Enter 'y' to start the game. "))
+                        peer_msg = ""
+
+                    elif action == "game_ttt_accept":
+                        self.Window.after(0, lambda: self.start_ttt_game(True)) 
+                        self.Window.after(0, lambda: self.display_message("[System] Opponent accepted. TicTacToe started!"))
+                        peer_msg = ""
+
+                    elif action == "game_ttt_move":
+                   
+                        if hasattr(self, "ttt_game") and self.ttt_game:
+                            self.Window.after(0, lambda p=parsed: self.ttt_game.apply_opponent_move(p["move"]))
+                        peer_msg = ""
+                except Exception:
+                    pass 
 
             if self.my_msg or peer_msg:
                 msg = self.sm.proc(self.my_msg, peer_msg)
                 self.my_msg = ""
-
                 if msg:
-                    self.display_message(self.format_message(msg))
+                    self.Window.after(0, lambda m=msg: self.display_message(self.format_message(m)))
 
     # ================= FORMAT =================
     def format_message(self, msg):
@@ -259,3 +313,29 @@ Better summary if you chat on ONE topic
     # ================= RUN =================
     def run(self):
         self.login()
+
+    # ================= GAMES =================
+    def start_snake(self):
+        SnakeGame(self.Window, self.on_snake_over)
+
+    def on_snake_over(self, score):
+        msg = json.dumps({"action": "game_snake_score", "score": score})
+        self.send(msg)
+
+    def invite_ttt(self):
+        if self.sm.get_state() != S_CHATTING or not self.sm.peer:
+            self.display_message("[System] Please connect to a user (c [name]) first!")
+            return
+        msg = json.dumps({"action": "game_ttt_invite", "target": self.sm.peer})
+        self.send(msg)
+        self.display_message(f"[System] Invite sent to {self.sm.peer}. Waiting for accept...")
+
+    def start_ttt_game(self, is_first):
+        my_symbol = "X" if is_first else "O"
+        self.ttt_game = TicTacToeGame(self.Window, is_first, my_symbol, self.send_ttt_move)
+
+    def send_ttt_move(self, index):
+        peer = self.sm.peer if self.sm.get_state() == S_CHATTING else getattr(self, "pending_ttt_peer", "")
+        if peer:
+            payload = json.dumps({"action": "game_ttt_move", "target": peer, "move": index})
+            self.send(payload)

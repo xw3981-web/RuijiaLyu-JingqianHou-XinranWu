@@ -22,6 +22,7 @@ class Server:
         self.logged_sock2name = {} # dict mapping socket to user name
         self.all_sockets = []
         self.group = grp.Group()
+        self.snake_scores = {} # Dictionary keeping snake game scores
         #start server
         self.server=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.bind(SERVER)
@@ -177,6 +178,30 @@ class Server:
                     mysend(to_sock, json.dumps({"action":"disconnect"}))
 #==============================================================================
 #                 the "from" guy really, really has had enough
+#==============================================================================
+
+            elif msg["action"] == "game_snake_score":
+                from_name = self.logged_sock2name[from_sock]
+                score = msg.get("score", 0)
+
+                if from_name not in self.snake_scores or score > self.snake_scores[from_name]:
+                    self.snake_scores[from_name] = score
+              
+                sorted_scores = sorted(self.snake_scores.items(), key=lambda x: x[1], reverse=True)
+                rank_str = "\n".join([f"{i+1}. {k}: {v}" for i, (k,v) in enumerate(sorted_scores)])
+                
+                for sock in self.logged_sock2name.keys():
+                    mysend(sock, json.dumps({"action": "game_snake_rank", "rank": rank_str}))
+
+            elif msg["action"] in ["game_ttt_invite", "game_ttt_accept", "game_ttt_move"]:
+                target = msg.get("target")
+                if target in self.logged_name2sock:
+                    to_sock = self.logged_name2sock[target]
+                    forward_msg = msg.copy()
+                    forward_msg["from"] = self.logged_sock2name[from_sock]
+                    mysend(to_sock, json.dumps(forward_msg))
+#==============================================================================
+#                games (Snake & TicTacToe)
 #==============================================================================
 
         else:
